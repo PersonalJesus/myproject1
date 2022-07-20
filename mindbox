@@ -1,0 +1,74 @@
+# я не совсем понял для чего информация про инициализацию приложения, если даже не пройду можно ли получить ответ, для чего эта информация ?) 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: 
+   run: my-web-app
+  name: my-web-app
+replicas: 1
+spec:
+  selector:
+    matchLabels:
+      app: my-web-app
+  template:
+    metadata:
+      labels:
+        app: my-web-app
+    spec:
+      containers:
+      - name: my-web-app
+        image: repository.mydomain.ru/my-web-app
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m" 
+--- # для того чтобы можно было достучаться до приложения 
+apiVersion: v1 
+kind: Service
+metadata:
+ labels:
+   run: my-web-app
+ name: my-web-app
+spec:
+ selector:
+   run: my-web-app
+ ports:
+ - name: http-port
+   port: 80
+   protocol: TCP
+   targetPort: 80            
+--- # Горизонтальное маштабирование чтобы автоматически увеличивалось количество реплик и уменьшалось
+apiVersion: autoscaling/v1  
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-web-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-web-app
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 50 # так как приложение задействует много цпу, то при утилизации свыше 50% увеличивается количество реплик
+--- #добавил ингресс для балансировки нагрузки и возможно появятся какие нибудь ещё приложения по этому домену 
+apiVersion: networking.k8s.io/v1  
+kind: Ingress
+metadata:
+  name: my-web-app
+spec:
+  rules:
+  - host: mydomain.ru
+    http:
+      paths:
+      - path: /my-web-app
+        pathType: Prefix
+        backend:
+          service:
+            name: my-web-app
+            port:
+              number: 80
